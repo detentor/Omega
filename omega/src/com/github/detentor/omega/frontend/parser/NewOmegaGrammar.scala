@@ -12,11 +12,12 @@ import com.github.detentor.omega.frontend.parser.ast.OmegaStatement
 import com.github.detentor.omega.frontend.parser.ast.Const
 import com.github.detentor.omega.frontend.parser.ast.OmegaStaticMethodCallStatement
 import com.github.detentor.omega.frontend.parser.ast.OmegaConstStatement
+import scala.util.parsing.combinator.PackratParsers
 
 /**
  * A princípio guardará a gramática da linguagem Omega.
  */
-class OmegaGrammar extends RegexParsers 
+class NewOmegaGrammar extends RegexParsers with PackratParsers 
 {
 	def openParens : Parser[String] = "\\(".r
 	def closeParens : Parser[String] = "\\)".r
@@ -34,6 +35,7 @@ class OmegaGrammar extends RegexParsers
 	//Declaração de método
 	//tipo nomeMetodo(Int a, Int b) { }
 	def identifier = "[a-zA-Z][a-zA-Z0-9]*".r ^^ { k => k}
+	def classIdentifier = "[A-Z][a-zA-Z0-9]*".r ^^ { k => k}
 	
 	//definição de constantes
 	def numLiteral = "[0-9]+".r ^^ { k => NumConst(k) }
@@ -42,10 +44,8 @@ class OmegaGrammar extends RegexParsers
 
 	
 	//Tipo de uma classe: o tipo é um caminho completo, ou só o alias de um import
-	def classType : Parser[OmegaType] = identifier~opt(dotSymbol~classType) ^^ { 
-		case prefix~None => OmegaType(prefix)
-		case prefix~Some(dot~novo) => OmegaType(prefix + dot + novo)
-	}
+	lazy val classType : PackratParser[OmegaType] = ((identifier~dotSymbol~classType ^^ { case ident~dot~cType => OmegaType(ident + dot + cType.name) }) 
+													|  (classIdentifier ^^ { cName => OmegaType(cName)}))  
 	
 	def methodArg : Parser[List[OmegaVariable]] = classType~identifier~(opt(argSeparator~methodArg)) ^^ 
 	{
@@ -78,19 +78,22 @@ class OmegaGrammar extends RegexParsers
 		case firstStatement~others => List(firstStatement) ::: others.getOrElse(Nil)
 	}
 	
-	def staticCall : Parser[OmegaStaticMethodCallStatement] = classType~dotSymbol~identifier~openParens~opt(callArg)~closeParens ^^ {
+	lazy val staticCall : PackratParser[OmegaStaticMethodCallStatement] = classType~dotSymbol~identifier~openParens~opt(callArg)~closeParens ^^ {
 		case fromClass~_~methodName~_~args~_ => OmegaStaticMethodCallStatement(fromClass, methodName, args.getOrElse(Nil)) 
 	}
 }
 
-object OmegaGrammar
+object NewOmegaGrammar
 {
 	def main(args: Array[String]) 
 	{
-		val parser = new OmegaGrammar
+		val parser = new NewOmegaGrammar
 		
-		val mTry = parser.parseAll(parser.staticCall, "Integer.valueOf(\"55\")");
-		println(mTry)
+//		val cName = parser.parseAll(parser.classType, "java.com.Teste");
+//		println(cName)
+		
+//		val mTry = parser.parseAll(parser.staticCall, "Integer.valueOf(\"55\")");
+//		println(mTry)
 		
 		val resp = parser.parseAll(parser.classDeclaration, "Teste" +
 				"{" +
@@ -100,7 +103,10 @@ object OmegaGrammar
 						"Integer.valueOf(\"55\")" +
 					"\n}" +
 				"}")
+				
 		println(new JavaConverter().convert(resp.get))
+		
+		println("\n\n" + resp)
   
 	}
 }

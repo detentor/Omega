@@ -23,8 +23,8 @@ class JavaConverter
 		"public " + theMethod.retType + " " + theMethod.name + 
 			theMethod.params.map(convert).mkString("(", ", ", ")") + 
 		"\n{\n" + 
-			theMethod.methodBody.map(convert).mkString("\n") + 
-			"\n}\n"
+			theMethod.methodBody.map(convert).mkString(";\n") + 
+			";\n}\n"
 	}
 	
 	def convert(theVariable : OmegaVariable) : String = 
