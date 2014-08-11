@@ -13,74 +13,127 @@ import com.github.detentor.omega.frontend.parser.ast.Const
 import com.github.detentor.omega.frontend.parser.ast.OmegaStaticMethodCallStatement
 import com.github.detentor.omega.frontend.parser.ast.OmegaConstStatement
 import scala.util.parsing.combinator.PackratParsers
+import com.github.detentor.omega.frontend.parser.ast.OmegaMethod
+import com.github.detentor.omega.frontend.parser.ast.StringConst
+import com.github.detentor.omega.frontend.parser.ast.NumConst
+import com.github.detentor.omega.frontend.parser.ast.AbsoluteType
+import com.github.detentor.omega.frontend.parser.ast.AbsoluteType
+import com.github.detentor.omega.frontend.parser.ast.RelativeType
 
 /**
  * A princípio guardará a gramática da linguagem Omega.
  */
 class NewOmegaGrammar extends RegexParsers with PackratParsers 
 {
+  
+  //Outros
 	def openParens : Parser[String] = "\\(".r
 	def closeParens : Parser[String] = "\\)".r
-	def openBracket = "\\{".r
+	def openBracket = "\\{".r 
 	def closeBracket = "\\}".r
-	def dotSymbol = "\\.".r ^^ { k => k}
+	def dotSymbol = "\\.".r 
 	def argSeparator : Parser[String] = ",".r
-	
+	def assignmentOperator = "=".r
+
 	//keywords:
+	def classKeyword = "class".r
 	def importKeyword = "import".r
+	def packageKeyword = "package".r
+	def mutKeyword = "mut".r
+	
+  //definição de constantes
+	def numLiteral = "[0-9]+".r ^^ { k => k }
+	def stringLiteral = "\".*?\"".r ^^ { k => k }
+	def constValue = numLiteral | stringLiteral
+
+	//Identificadores
+	def identifier = "[a-zA-Z][a-zA-Z0-9_]*".r ^^ { k => k}    //identificadores podem começar de qualquer jeito
+	def varIdentifier = "[a-z][a-zA-Z0-9_]*".r ^^ { k => k}    //variáveis só podem começar com minúsculas
+	def classIdentifier = "[A-Z][a-zA-Z0-9_]*".r ^^ { k => k}  //classes só podem começar com maiúsculas
 	
 	//Bloco Import
-	def importBlock = importKeyword~openBracket~closeBracket
+	def importBlock = importKeyword~openBracket~rep(importDeclaration)~closeBracket ^^ { case _~_~imports~_ => imports }
+	
+	//Declaração de pacote
+	def packageDeclaration = packageKeyword~importDeclaration ^^ { case _~packageName => packageName }
+	def importComb = dotSymbol~identifier ^^ { case dot~ident => dot + ident }
+	def importDeclaration = identifier~rep(importComb) ^^ { case ident~rest => AbsoluteType(ident + rest.mkString("")) }
+	
+	//Depois alterar para refletir os dois tipos possíveis
+	def typeDeclaration : Parser[OmegaType] = (importDeclaration | classIdentifier) ^^ 
+	{
+	     case classIdentif : String => RelativeType(classIdentif)
+	     case importDecl : AbsoluteType  => importDecl
+	}
+	
+	//Declaração de variáveis: versão full (com o tipo) e versão curta (sem o tipo)
+	def varDeclFull = typeDeclaration~varIdentifier~assignmentOperator~constValue ^^ { case varType~varName~_~varValue => OmegaVariable(varType, varName)  }
+	def varDeclShort = varIdentifier~assignmentOperator~constValue ^^ { case varName~_~varValue => OmegaVariable(null, varName)  }
+
+	def varDeclaration = opt(mutKeyword)~(varDeclShort | varDeclFull)  ^^ 
+	{
+	     case isMutable~omegaVar => omegaVar
+	}
+	
+	//Statement
+	def constStatement = ""
+	def statement = constStatement
+	//	//chamada de método estático
+//	def statement : Parser[OmegaStatement] = (const | staticCall) ^^ 
+//	{
+//		case constante : Const => OmegaConstStatement(constante)
+//		case sCall : OmegaStaticMethodCallStatement => sCall
+//		case _ => throw new IllegalArgumentException
+//	}
+	
 	
 	//Declaração de método
 	//tipo nomeMetodo(Int a, Int b) { }
-	def identifier = "[a-zA-Z][a-zA-Z0-9]*".r ^^ { k => k}
-	def classIdentifier = "[A-Z][a-zA-Z0-9]*".r ^^ { k => k}
+
 	
-	//definição de constantes
-	def numLiteral = "[0-9]+".r ^^ { k => NumConst(k) }
-	def stringLiteral = "\".*?\"".r ^^ { k => StringConst(k) }
-	def const : Parser[Const] = numLiteral | stringLiteral
+
 
 	
 	//Tipo de uma classe: o tipo é um caminho completo, ou só o alias de um import
-	lazy val classType : PackratParser[OmegaType] = ((identifier~dotSymbol~classType ^^ { case ident~dot~cType => OmegaType(ident + dot + cType.name) }) 
-													|  (classIdentifier ^^ { cName => OmegaType(cName)}))  
+//	lazy val classType : PackratParser[OmegaType] = ((identifier~dotSymbol~classType ^^ { case ident~dot~cType => OmegaType(ident + dot + cType.name) }) 
+//													|  (classIdentifier ^^ { cName => OmegaType(cName)}))  
 	
-	def methodArg : Parser[List[OmegaVariable]] = classType~identifier~(opt(argSeparator~methodArg)) ^^ 
-	{
-		case tipo~nome~None => List(OmegaVariable(tipo, nome))
-		case tipo~nome~Some(sep~anotherArg) => List(OmegaVariable(tipo, nome)) ::: anotherArg
-	}
+//	def methodArg : Parser[List[OmegaVariable]] = classType~identifier~(opt(argSeparator~methodArg)) ^^ 
+//	{
+//		case tipo~nome~None => List(OmegaVariable(tipo, nome))
+//		case tipo~nome~Some(sep~anotherArg) => List(OmegaVariable(tipo, nome)) ::: anotherArg
+//	}
 	
 	//definição de método
-	def method = classType~identifier~openParens~opt(methodArg)~closeParens~openBracket~opt(rep(statement))~closeBracket ^^ 
+//	def method = classType~identifier~openParens~opt(methodArg)~closeParens~openBracket~opt(rep(statement))~closeBracket ^^ 
+//	{
+//		case retType~mName~_~args~_~_~stats~_ => OmegaMethod(retType, mName, args.getOrElse(Nil), stats.getOrElse(Nil))
+//	}
+	
+	
+	def classDeclaration : Parser[OmegaClass] = 
+	  	  packageDeclaration~importBlock~classKeyword~identifier~openBracket~rep(varDeclaration)~closeBracket ^^ 
 	{
-		case retType~mName~_~args~_~_~stats~_ => OmegaMethod(retType, mName, args.getOrElse(Nil), stats.getOrElse(Nil))
+	  case packageName~imports~_~nomeClasse~_~vars~_ => OmegaClass(nomeClasse, packageName, vars, Nil)
+		//case packageName~imports~nomeClasse~_~_~_ => )
 	}
 	
-	//definição de uma classe
-	def classDeclaration : Parser[OmegaClass] = identifier~openBracket~importBlock~opt(rep(method))~closeBracket ^^ 
-	{
-		case nomeClasse~_~_~methods~_ => OmegaClass(nomeClasse, "" , methods.getOrElse(Nil))
-	}
+//	//chamada de método estático
+//	def statement : Parser[OmegaStatement] = (const | staticCall) ^^ 
+//	{
+//		case constante : Const => OmegaConstStatement(constante)
+//		case sCall : OmegaStaticMethodCallStatement => sCall
+//		case _ => throw new IllegalArgumentException
+//	}
 	
-	//chamada de método estático
-	def statement : Parser[OmegaStatement] = (const | staticCall) ^^ 
-	{
-		case constante : Const => OmegaConstStatement(constante)
-		case sCall : OmegaStaticMethodCallStatement => sCall
-		case _ => throw new IllegalArgumentException
-	}
-	
-	def callArg = statement~opt(rep(argSeparator~>statement)) ^^ 
-	{
-		case firstStatement~others => List(firstStatement) ::: others.getOrElse(Nil)
-	}
-	
-	lazy val staticCall : PackratParser[OmegaStaticMethodCallStatement] = classType~dotSymbol~identifier~openParens~opt(callArg)~closeParens ^^ {
-		case fromClass~_~methodName~_~args~_ => OmegaStaticMethodCallStatement(fromClass, methodName, args.getOrElse(Nil)) 
-	}
+//	def callArg = statement~opt(rep(argSeparator~>statement)) ^^ 
+//	{
+//		case firstStatement~others => List(firstStatement) ::: others.getOrElse(Nil)
+//	}
+//	
+//	lazy val staticCall : PackratParser[OmegaStaticMethodCallStatement] = classType~dotSymbol~identifier~openParens~opt(callArg)~closeParens ^^ {
+//		case fromClass~_~methodName~_~args~_ => OmegaStaticMethodCallStatement(fromClass, methodName, args.getOrElse(Nil)) 
+//	}
 }
 
 object NewOmegaGrammar
@@ -95,16 +148,17 @@ object NewOmegaGrammar
 //		val mTry = parser.parseAll(parser.staticCall, "Integer.valueOf(\"55\")");
 //		println(mTry)
 		
-		val resp = parser.parseAll(parser.classDeclaration, "Teste" +
-				"{" +
-				"import {}" + 
-				"	Int sum(Int a, String b){" +
-						"\"22\"" +
-						"Integer.valueOf(\"55\")" +
-					"\n}" +
+		val resp = parser.parseAll(parser.classDeclaration,
+		    "package legal.Teste " + "\n" +
+		    "import {}" + "\n" +
+		    "class Teste" +
+				"{" + "\n" +
+				 "mut valor = 0" + "\n" + 
 				"}")
 				
 		println(new JavaConverter().convert(resp.get))
+		
+		println(resp.get.toJava)
 		
 		println("\n\n" + resp)
   
