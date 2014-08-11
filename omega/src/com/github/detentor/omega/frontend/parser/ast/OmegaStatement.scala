@@ -3,9 +3,9 @@ package com.github.detentor.omega.frontend.parser.ast
 /**
  * Um statement é uma expressão que retorna um tipo
  */
-sealed class Statement protected(val retType : OmegaType) 
+sealed trait Statement
 {
-
+    def getReturnType : OmegaType
 }
 
 //case class StaticMethodCallStatement (ofClass : OmegaType, 
@@ -18,7 +18,14 @@ sealed class Statement protected(val retType : OmegaType)
 //
 //}
 
-case class ConstStatement(value : Const) extends Statement(value.getType)
+case class ConstStatement(value : Const) extends Statement
 {
+    val getReturnType = value.getType
     override def toString = value.toString()
 }
+
+case class MethodCall(identifier : String, methodName : String)
+{
+  
+}
+

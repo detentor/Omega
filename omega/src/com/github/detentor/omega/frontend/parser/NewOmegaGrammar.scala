@@ -17,6 +17,14 @@ import com.github.detentor.omega.frontend.parser.ast.StringConst
 import com.github.detentor.omega.frontend.parser.ast.StringConst
 import com.github.detentor.omega.frontend.parser.ast.Statement
 import com.github.detentor.omega.backend.java.JavaConverter
+import com.github.detentor.omega.frontend.parser.ast.MethodCall
+
+
+//observações:
+
+//1) a inferência de tipos significa que só é possível saber o tipo das expressões quando for a verificação
+//semântica. Por isso o ideal é criar tipos bem leves, de forma que essa fase seja o menos custosa possível 
+//do ponto de vista de performance.
 
 //A princípio guardará a gramática da linguagem Omega.
 class NewOmegaGrammar extends RegexParsers with PackratParsers 
@@ -54,27 +62,33 @@ class NewOmegaGrammar extends RegexParsers with PackratParsers
 	def packageDeclaration = packageKeyword~importDeclaration ^^ { case _~packageName => packageName }
 	def importComb = dotSymbol~identifier ^^ { case dot~ident => dot + ident }
 	def importDeclaration = identifier~rep(importComb) ^^ { case ident~rest => AbsoluteType(ident + rest.mkString("")) }
-	
-	//Depois alterar para refletir os dois tipos possíveis
+
+	//Declaração de tipos (tipos relativos ao import e tipos absolutos)
 	def typeDeclaration : Parser[OmegaType] = (importDeclaration | classIdentifier) ^^ 
 	{
 	     case classIdentif : String => RelativeType(classIdentif)
 	     case importDecl : AbsoluteType  => importDecl
 	}
-	
-	//Declaração de variáveis: versão full (com o tipo) e versão curta (sem o tipo)
+
+	//Declaração de variáveis: versão full (com o tipo) e versão curta (sem o tipo - inferência)
 	def varDeclFull = typeDeclaration~varIdentifier~assignmentOperator~statement ^^ { case varType~varName~_~varValue => Tuple3(varType, varName, varValue)  }
-	def varDeclShort = varIdentifier~assignmentOperator~statement ^^ { case varName~_~varValue => Tuple3(varValue.retType, varName, varValue)  }
+	def varDeclShort = varIdentifier~assignmentOperator~statement ^^ { case varName~_~varValue => Tuple3(varValue.getReturnType, varName, varValue)  }
 
 	def varDeclaration = opt(mutKeyword)~(varDeclShort | varDeclFull)  ^^ 
 	{
 	     case isMutable~omegaVar => OmegaVariable(omegaVar._1, omegaVar._2, isMutable.isEmpty, omegaVar._3)
 	}
-	
-	//Statement
+
+	//Statements
 	def constStatement = constValue ^^ { constValue => ConstStatement(constValue) }
-	
 	def statement : Parser[Statement] = constStatement //Por enquanto só tem esse
+	
+	//chamada de método de instância
+	def methodCall = varIdentifier~dotSymbol~varIdentifier~openParens~closeParens ^^ 
+	{
+	    case varName~_~methodName~_~_ => MethodCall(varName, methodName)
+	}
+	
 	
 	//	//chamada de método estático
 //	def statement : Parser[OmegaStatement] = (const | staticCall) ^^ 
@@ -139,12 +153,6 @@ object NewOmegaGrammar
 	def main(args: Array[String]) 
 	{
 		val parser = new NewOmegaGrammar
-		
-//		val cName = parser.parseAll(parser.classType, "java.com.Teste");
-//		println(cName)
-		
-//		val mTry = parser.parseAll(parser.staticCall, "Integer.valueOf(\"55\")");
-//		println(mTry)
 		
 		val resp = parser.parseAll(parser.classDeclaration,
 		    "package legal.Teste " + "\n" +
