@@ -1,28 +1,24 @@
 package com.github.detentor.omega.frontend.parser
 
+import scala.util.parsing.combinator.PackratParsers
 import scala.util.parsing.combinator.RegexParsers
+import com.github.detentor.omega.frontend.parser.ast.AbsoluteType
+import com.github.detentor.omega.frontend.parser.ast.AbsoluteType
+import com.github.detentor.omega.frontend.parser.ast.Const
+import com.github.detentor.omega.frontend.parser.ast.ConstStatement
+import com.github.detentor.omega.frontend.parser.ast.ConstStatement
 import com.github.detentor.omega.frontend.parser.ast.NumConst
-import com.github.detentor.omega.frontend.parser.ast.StringConst
+import com.github.detentor.omega.frontend.parser.ast.NumConst
+import com.github.detentor.omega.frontend.parser.ast.OmegaClass
 import com.github.detentor.omega.frontend.parser.ast.OmegaType
 import com.github.detentor.omega.frontend.parser.ast.OmegaVariable
-import com.github.detentor.omega.frontend.parser.ast.OmegaMethod
-import com.github.detentor.omega.frontend.parser.ast.OmegaClass
-import com.github.detentor.omega.backend.java.JavaConverter
-import com.github.detentor.omega.frontend.parser.ast.OmegaStatement
-import com.github.detentor.omega.frontend.parser.ast.Const
-import com.github.detentor.omega.frontend.parser.ast.OmegaStaticMethodCallStatement
-import com.github.detentor.omega.frontend.parser.ast.OmegaConstStatement
-import scala.util.parsing.combinator.PackratParsers
-import com.github.detentor.omega.frontend.parser.ast.OmegaMethod
-import com.github.detentor.omega.frontend.parser.ast.StringConst
-import com.github.detentor.omega.frontend.parser.ast.NumConst
-import com.github.detentor.omega.frontend.parser.ast.AbsoluteType
-import com.github.detentor.omega.frontend.parser.ast.AbsoluteType
 import com.github.detentor.omega.frontend.parser.ast.RelativeType
+import com.github.detentor.omega.frontend.parser.ast.StringConst
+import com.github.detentor.omega.frontend.parser.ast.StringConst
+import com.github.detentor.omega.frontend.parser.ast.Statement
+import com.github.detentor.omega.backend.java.JavaConverter
 
-/**
- * A princípio guardará a gramática da linguagem Omega.
- */
+//A princípio guardará a gramática da linguagem Omega.
 class NewOmegaGrammar extends RegexParsers with PackratParsers 
 {
   
@@ -42,9 +38,9 @@ class NewOmegaGrammar extends RegexParsers with PackratParsers
 	def mutKeyword = "mut".r
 	
   //definição de constantes
-	def numLiteral = "[0-9]+".r ^^ { k => k }
-	def stringLiteral = "\".*?\"".r ^^ { k => k }
-	def constValue = numLiteral | stringLiteral
+	def numLiteral = "[0-9]+".r ^^ { numVal => NumConst(numVal) }
+	def stringLiteral = "\".*?\"".r ^^ { stringVal => StringConst(stringVal) }
+	def constValue : Parser[Const] = numLiteral | stringLiteral
 
 	//Identificadores
 	def identifier = "[a-zA-Z][a-zA-Z0-9_]*".r ^^ { k => k}    //identificadores podem começar de qualquer jeito
@@ -67,17 +63,19 @@ class NewOmegaGrammar extends RegexParsers with PackratParsers
 	}
 	
 	//Declaração de variáveis: versão full (com o tipo) e versão curta (sem o tipo)
-	def varDeclFull = typeDeclaration~varIdentifier~assignmentOperator~constValue ^^ { case varType~varName~_~varValue => OmegaVariable(varType, varName)  }
-	def varDeclShort = varIdentifier~assignmentOperator~constValue ^^ { case varName~_~varValue => OmegaVariable(null, varName)  }
+	def varDeclFull = typeDeclaration~varIdentifier~assignmentOperator~statement ^^ { case varType~varName~_~varValue => Tuple3(varType, varName, varValue)  }
+	def varDeclShort = varIdentifier~assignmentOperator~statement ^^ { case varName~_~varValue => Tuple3(varValue.retType, varName, varValue)  }
 
 	def varDeclaration = opt(mutKeyword)~(varDeclShort | varDeclFull)  ^^ 
 	{
-	     case isMutable~omegaVar => omegaVar
+	     case isMutable~omegaVar => OmegaVariable(omegaVar._1, omegaVar._2, isMutable.isEmpty, omegaVar._3)
 	}
 	
 	//Statement
-	def constStatement = ""
-	def statement = constStatement
+	def constStatement = constValue ^^ { constValue => ConstStatement(constValue) }
+	
+	def statement : Parser[Statement] = constStatement //Por enquanto só tem esse
+	
 	//	//chamada de método estático
 //	def statement : Parser[OmegaStatement] = (const | staticCall) ^^ 
 //	{
@@ -153,14 +151,9 @@ object NewOmegaGrammar
 		    "import {}" + "\n" +
 		    "class Teste" +
 				"{" + "\n" +
-				 "mut valor = 0" + "\n" + 
+				 "valor = 0" + "\n" + 
 				"}")
 				
 		println(new JavaConverter().convert(resp.get))
-		
-		println(resp.get.toJava)
-		
-		println("\n\n" + resp)
-  
 	}
 }

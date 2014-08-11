@@ -6,7 +6,7 @@ import com.github.detentor.omega.frontend.parser.ast.OmegaVariable
 /**
  * Responsável por transformar código da linguagem Omega para a linguagem Java
  */
-class JavaConverter 
+class ByteCodeConverter 
 {
 	def convert(theClass : OmegaClass) : String = 
 	{
