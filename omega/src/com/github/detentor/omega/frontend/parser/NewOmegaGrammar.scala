@@ -129,61 +129,13 @@ class NewOmegaGrammar extends RegexParsers with PackratParsers
 	    case (varName : String)~_~methodReference => MethodCall(varName, methodReference._1, methodReference._2)
 	    case (fromType : OmegaType)~_~methodReference => StaticMethodCall(fromType, methodReference._1, methodReference._2)
 	}
-		
-	//definição de método
-//	def method = classType~identifier~openParens~opt(methodArg)~closeParens~openBracket~opt(rep(statement))~closeBracket ^^ 
-//	{
-//		case retType~mName~_~args~_~_~stats~_ => OmegaMethod(retType, mName, args.getOrElse(Nil), stats.getOrElse(Nil))
-//	}
-	
-	
-	
-	//	//chamada de método estático
-//	def statement : Parser[OmegaStatement] = (const | staticCall) ^^ 
-//	{
-//		case constante : Const => OmegaConstStatement(constante)
-//		case sCall : OmegaStaticMethodCallStatement => sCall
-//		case _ => throw new IllegalArgumentException
-//	}
-	
-	
-	//Declaração de método
-	//tipo nomeMetodo(Int a, Int b) { }
-
-	//Tipo de uma classe: o tipo é um caminho completo, ou só o alias de um import
-//	lazy val classType : PackratParser[OmegaType] = ((identifier~dotSymbol~classType ^^ { case ident~dot~cType => OmegaType(ident + dot + cType.name) }) 
-//													|  (classIdentifier ^^ { cName => OmegaType(cName)}))  
-	
-//	def methodArg : Parser[List[OmegaVariable]] = classType~identifier~(opt(argSeparator~methodArg)) ^^ 
-//	{
-//		case tipo~nome~None => List(OmegaVariable(tipo, nome))
-//		case tipo~nome~Some(sep~anotherArg) => List(OmegaVariable(tipo, nome)) ::: anotherArg
-//	}
-
 	
 	def classDeclaration : Parser[OmegaClass] = 
 	  	  packageDeclaration~importBlock~classKeyword~identifier~openBracket~rep(varDeclaration)~rep(methodDeclaration)~closeBracket ^^ 
 	{
 	  case packageName~imports~_~nomeClasse~_~vars~methods~_ => OmegaClass(nomeClasse, packageName, vars.map(_.variable), methods)
-		//case packageName~imports~nomeClasse~_~_~_ => )
 	}
-	
-//	//chamada de método estático
-//	def statement : Parser[OmegaStatement] = (const | staticCall) ^^ 
-//	{
-//		case constante : Const => OmegaConstStatement(constante)
-//		case sCall : OmegaStaticMethodCallStatement => sCall
-//		case _ => throw new IllegalArgumentException
-//	}
-	
-//	def callArg = statement~opt(rep(argSeparator~>statement)) ^^ 
-//	{
-//		case firstStatement~others => List(firstStatement) ::: others.getOrElse(Nil)
-//	}
-//	
-//	lazy val staticCall : PackratParser[OmegaStaticMethodCallStatement] = classType~dotSymbol~identifier~openParens~opt(callArg)~closeParens ^^ {
-//		case fromClass~_~methodName~_~args~_ => OmegaStaticMethodCallStatement(fromClass, methodName, args.getOrElse(Nil)) 
-//	}
+
 }
 
 object NewOmegaGrammar
