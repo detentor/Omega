@@ -21,6 +21,8 @@ import com.github.detentor.omega.frontend.parser.ast.MethodCall
 import com.github.detentor.omega.frontend.parser.ast.OmegaMethod
 import com.github.detentor.omega.frontend.parser.ast.VariableDeclaration
 import com.github.detentor.omega.frontend.parser.ast.VariableDeclaration
+import com.github.detentor.omega.frontend.parser.ast.StaticMethodCall
+import com.github.detentor.omega.frontend.parser.ast.OmegaVariable
 
 
 //observações:
@@ -82,24 +84,57 @@ class NewOmegaGrammar extends RegexParsers with PackratParsers
 	//Declaração de variáveis (o tipo é opcional)
 	def varDeclaration = opt(mutKeyword)~opt(typeDeclaration)~varIdentifier~assignmentOperator~statement  ^^ 
 	{
-	     case isMutable~varType~varName~_~statement => VariableDeclaration(OmegaVariable(varType, varName, isMutable.isEmpty, statement))
+	     case isMutable~varType~varName~_~statement => VariableDeclaration(OmegaVariable(varType, varName, isMutable.isEmpty, Some(statement)))
+	}
+	
+	//representa um único argumento de um método
+	def methodArg = typeDeclaration~varIdentifier ^^ 
+	{
+	  case varType~varName => OmegaVariable(Some(varType), varName, true, None) 
+  }
+
+  //representa os parâmetros de um método
+	def methodParameters = opt(methodArg~rep(argSeparator~methodArg)) ^^ 
+	{
+	    case None => Nil
+	    case Some(firstArg~otherArgs) => firstArg :: otherArgs.map(_._2)
 	}
 	
 	//Declaração de métodos
-	def methodDeclaration = typeDeclaration~methodIdentifier~openParens~closeParens~openBracket~rep(statement)~closeBracket ^^ 
+	def methodDeclaration = typeDeclaration~methodIdentifier~openParens~methodParameters~closeParens~openBracket~rep(statement)~closeBracket ^^ 
 	{
-	    case retType~methodName~_~_~_~methodBody~_ => OmegaMethod(retType, methodName, Nil, methodBody)
+	    case retType~methodName~_~methodParams~_~_~methodBody~_ => OmegaMethod(retType, methodName, methodParams, methodBody)
 	}
 
   //Statements
 	def constStatement = constValue ^^ { constValue => ConstStatement(constValue) }
-	def statement : Parser[Statement] = constStatement | instanceMethodCall | varDeclaration //Por enquanto só tem esse
+	def statement : Parser[Statement] = constStatement | methodCall | varDeclaration //Por enquanto só tem esse
 	
-	//chamada de método de instância
-	def instanceMethodCall = varIdentifier~dotSymbol~methodIdentifier~openParens~closeParens ^^ 
+	//parâmetros dos métodos
+	def methodParams = opt(statement~rep(argSeparator~statement)) ^^ 
 	{
-	    case varName~_~methodName~_~_ => MethodCall(varName, methodName)
+	    case None => Nil
+	    case Some(firstStatement~rest) => firstStatement :: rest.map(_._2) 
 	}
+	
+	//referência a um método a ser chamado
+	def methodReference = methodIdentifier~openParens~methodParams~closeParens ^^
+	{
+	    case methodName~_~methodParams~_ => Tuple2(methodName, methodParams)
+	}
+	
+	//Chamada de métodos
+	def methodCall = (varIdentifier | typeDeclaration)~dotSymbol~methodReference ^^
+	{
+	    case (varName : String)~_~methodReference => MethodCall(varName, methodReference._1, methodReference._2)
+	    case (fromType : OmegaType)~_~methodReference => StaticMethodCall(fromType, methodReference._1, methodReference._2)
+	}
+		
+	//definição de método
+//	def method = classType~identifier~openParens~opt(methodArg)~closeParens~openBracket~opt(rep(statement))~closeBracket ^^ 
+//	{
+//		case retType~mName~_~args~_~_~stats~_ => OmegaMethod(retType, mName, args.getOrElse(Nil), stats.getOrElse(Nil))
+//	}
 	
 	
 	
@@ -115,10 +150,6 @@ class NewOmegaGrammar extends RegexParsers with PackratParsers
 	//Declaração de método
 	//tipo nomeMetodo(Int a, Int b) { }
 
-	
-
-
-	
 	//Tipo de uma classe: o tipo é um caminho completo, ou só o alias de um import
 //	lazy val classType : PackratParser[OmegaType] = ((identifier~dotSymbol~classType ^^ { case ident~dot~cType => OmegaType(ident + dot + cType.name) }) 
 //													|  (classIdentifier ^^ { cName => OmegaType(cName)}))  
@@ -128,13 +159,7 @@ class NewOmegaGrammar extends RegexParsers with PackratParsers
 //		case tipo~nome~None => List(OmegaVariable(tipo, nome))
 //		case tipo~nome~Some(sep~anotherArg) => List(OmegaVariable(tipo, nome)) ::: anotherArg
 //	}
-	
-	//definição de método
-//	def method = classType~identifier~openParens~opt(methodArg)~closeParens~openBracket~opt(rep(statement))~closeBracket ^^ 
-//	{
-//		case retType~mName~_~args~_~_~stats~_ => OmegaMethod(retType, mName, args.getOrElse(Nil), stats.getOrElse(Nil))
-//	}
-	
+
 	
 	def classDeclaration : Parser[OmegaClass] = 
 	  	  packageDeclaration~importBlock~classKeyword~identifier~openBracket~rep(varDeclaration)~rep(methodDeclaration)~closeBracket ^^ 
@@ -177,11 +202,14 @@ object NewOmegaGrammar
         {
             valor = 0
             mut varTeste = valor.getValor()
+            myVar = BigInteger.valueOf()
             
-            Int meuMetodo()
+            Int meuMetodo(String teste)
             {
                 Int methodVar = 1
                 mut methodVar2 = 0
+                BigInteger teste = BigInteger.valueOf("5")
+                teste.add(BigInteger.valueOf("10"))
             }
         }
       """

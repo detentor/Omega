@@ -24,9 +24,14 @@ case class ConstStatement(value : Const) extends Statement
     override def toString = value.toString()
 }
 
-case class MethodCall(identifier : String, methodName : String) extends Statement
+case class MethodCall(identifier : String, methodName : String, args : List[Statement]) extends Statement
 {
     override def toString = identifier + "." + methodName
+}
+
+case class StaticMethodCall(fromType : OmegaType, methodName : String, args : List[Statement]) extends Statement
+{
+    override def toString = fromType + "." + methodName
 }
 
 case class VariableDeclaration(variable : OmegaVariable) extends Statement
