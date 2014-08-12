@@ -2,6 +2,7 @@ package com.github.detentor.omega.backend.java
 
 import com.github.detentor.omega.frontend.parser.ast.OmegaClass
 import com.github.detentor.omega.frontend.parser.ast.OmegaVariable
+import com.github.detentor.omega.frontend.parser.ast.OmegaMethod
 
 /**
  * Responsável por transformar código da linguagem Omega para a linguagem Java
@@ -13,23 +14,22 @@ class JavaConverter
 	  "package " + theClass.thePackage + ";\n" + 
     //imports line
 	  "public " + theClass.name + "{" + "\n" + 
-    theClass.fields.map("private " + convert(_)).mkString("\n") + 
+    theClass.fields.map("private " + convert(_)).mkString("\n") + "\n" +  
+    theClass.methods.map("public " + convert(_)).mkString("\n") +
     "\n}"
 	}
 	
-//	def convert(theMethod : OmegaMethod) : String = 
-//	{
-//		"public " + theMethod.retType + " " + theMethod.name + 
-//			theMethod.params.map(convert).mkString("(", ", ", ")") + 
-//		"\n{\n" + 
-//			theMethod.methodBody.map(convert).mkString(";\n") + 
-//			";\n}\n"
-//	}
-//	
+	def convert(theMethod : OmegaMethod) : String = 
+	{
+	    theMethod.toString()
+	}
+	
 	def convert(theVariable : OmegaVariable) : String = 
 	{
 		  (if (theVariable.isFinal) "final " else "") + theVariable.varType + " " + theVariable.name + " = " + theVariable.initValue + ";"
 	}
+	
+	
 //	
 //	def convert(theStatement : OmegaStatement) : String = 
 //	{

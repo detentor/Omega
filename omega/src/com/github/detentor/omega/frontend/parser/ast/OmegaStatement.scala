@@ -5,7 +5,7 @@ package com.github.detentor.omega.frontend.parser.ast
  */
 sealed trait Statement
 {
-    def getReturnType : OmegaType
+   // def getReturnType : OmegaType
 }
 
 //case class StaticMethodCallStatement (ofClass : OmegaType, 
@@ -24,8 +24,12 @@ case class ConstStatement(value : Const) extends Statement
     override def toString = value.toString()
 }
 
-case class MethodCall(identifier : String, methodName : String)
+case class MethodCall(identifier : String, methodName : String) extends Statement
 {
-  
+    override def toString = identifier + "." + methodName
 }
 
+case class VariableDeclaration(variable : OmegaVariable) extends Statement
+{
+    override def toString = variable.toString
+}

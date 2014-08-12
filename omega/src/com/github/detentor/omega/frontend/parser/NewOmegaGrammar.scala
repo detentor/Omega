@@ -18,6 +18,9 @@ import com.github.detentor.omega.frontend.parser.ast.StringConst
 import com.github.detentor.omega.frontend.parser.ast.Statement
 import com.github.detentor.omega.backend.java.JavaConverter
 import com.github.detentor.omega.frontend.parser.ast.MethodCall
+import com.github.detentor.omega.frontend.parser.ast.OmegaMethod
+import com.github.detentor.omega.frontend.parser.ast.VariableDeclaration
+import com.github.detentor.omega.frontend.parser.ast.VariableDeclaration
 
 
 //observações:
@@ -45,7 +48,7 @@ class NewOmegaGrammar extends RegexParsers with PackratParsers
 	def packageKeyword = "package".r
 	def mutKeyword = "mut".r
 	
-  //definição de constantes
+  //definição de constantes (a refinar)
 	def numLiteral = "[0-9]+".r ^^ { numVal => NumConst(numVal) }
 	def stringLiteral = "\".*?\"".r ^^ { stringVal => StringConst(stringVal) }
 	def constValue : Parser[Const] = numLiteral | stringLiteral
@@ -53,41 +56,51 @@ class NewOmegaGrammar extends RegexParsers with PackratParsers
 	//Identificadores
 	def identifier = "[a-zA-Z][a-zA-Z0-9_]*".r ^^ { k => k}    //identificadores podem começar de qualquer jeito
 	def varIdentifier = "[a-z][a-zA-Z0-9_]*".r ^^ { k => k}    //variáveis só podem começar com minúsculas
+	def methodIdentifier = varIdentifier                       //Métodos só podem começar com minúsculas
 	def classIdentifier = "[A-Z][a-zA-Z0-9_]*".r ^^ { k => k}  //classes só podem começar com maiúsculas
 	
 	//Bloco Import
 	def importBlock = importKeyword~openBracket~rep(importDeclaration)~closeBracket ^^ { case _~_~imports~_ => imports }
 	
 	//Declaração de pacote
-	def packageDeclaration = packageKeyword~importDeclaration ^^ { case _~packageName => packageName }
-	def importComb = dotSymbol~identifier ^^ { case dot~ident => dot + ident }
-	def importDeclaration = identifier~rep(importComb) ^^ { case ident~rest => AbsoluteType(ident + rest.mkString("")) }
+	def packageComb = dotSymbol~varIdentifier ^^ { case dot~varIdent => dot + varIdent  }
+	def packageDeclaration = packageKeyword~(varIdentifier~rep(packageComb)) ^^ 
+	{ 
+	    case _~packName => AbsoluteType(packName._1 + packName._2.mkString)
+	}
+
+	def importComb = varIdentifier~dotSymbol ^^ { case ident~dot => ident + dot }
+	def importDeclaration = rep(importComb)~classIdentifier ^^ { case ident~rest => AbsoluteType(ident.mkString + rest) }
 
 	//Declaração de tipos (tipos relativos ao import e tipos absolutos)
-	def typeDeclaration : Parser[OmegaType] = (importDeclaration | classIdentifier) ^^ 
+	def typeDeclaration : Parser[OmegaType] = (classIdentifier | importDeclaration) ^^ 
 	{
 	     case classIdentif : String => RelativeType(classIdentif)
 	     case importDecl : AbsoluteType  => importDecl
 	}
 
-	//Declaração de variáveis: versão full (com o tipo) e versão curta (sem o tipo - inferência)
-	def varDeclFull = typeDeclaration~varIdentifier~assignmentOperator~statement ^^ { case varType~varName~_~varValue => Tuple3(varType, varName, varValue)  }
-	def varDeclShort = varIdentifier~assignmentOperator~statement ^^ { case varName~_~varValue => Tuple3(varValue.getReturnType, varName, varValue)  }
-
-	def varDeclaration = opt(mutKeyword)~(varDeclShort | varDeclFull)  ^^ 
+	//Declaração de variáveis (o tipo é opcional)
+	def varDeclaration = opt(mutKeyword)~opt(typeDeclaration)~varIdentifier~assignmentOperator~statement  ^^ 
 	{
-	     case isMutable~omegaVar => OmegaVariable(omegaVar._1, omegaVar._2, isMutable.isEmpty, omegaVar._3)
+	     case isMutable~varType~varName~_~statement => VariableDeclaration(OmegaVariable(varType, varName, isMutable.isEmpty, statement))
+	}
+	
+	//Declaração de métodos
+	def methodDeclaration = typeDeclaration~methodIdentifier~openParens~closeParens~openBracket~rep(statement)~closeBracket ^^ 
+	{
+	    case retType~methodName~_~_~_~methodBody~_ => OmegaMethod(retType, methodName, Nil, methodBody)
 	}
 
-	//Statements
+  //Statements
 	def constStatement = constValue ^^ { constValue => ConstStatement(constValue) }
-	def statement : Parser[Statement] = constStatement //Por enquanto só tem esse
+	def statement : Parser[Statement] = constStatement | instanceMethodCall | varDeclaration //Por enquanto só tem esse
 	
 	//chamada de método de instância
-	def methodCall = varIdentifier~dotSymbol~varIdentifier~openParens~closeParens ^^ 
+	def instanceMethodCall = varIdentifier~dotSymbol~methodIdentifier~openParens~closeParens ^^ 
 	{
 	    case varName~_~methodName~_~_ => MethodCall(varName, methodName)
 	}
+	
 	
 	
 	//	//chamada de método estático
@@ -124,9 +137,9 @@ class NewOmegaGrammar extends RegexParsers with PackratParsers
 	
 	
 	def classDeclaration : Parser[OmegaClass] = 
-	  	  packageDeclaration~importBlock~classKeyword~identifier~openBracket~rep(varDeclaration)~closeBracket ^^ 
+	  	  packageDeclaration~importBlock~classKeyword~identifier~openBracket~rep(varDeclaration)~rep(methodDeclaration)~closeBracket ^^ 
 	{
-	  case packageName~imports~_~nomeClasse~_~vars~_ => OmegaClass(nomeClasse, packageName, vars, Nil)
+	  case packageName~imports~_~nomeClasse~_~vars~methods~_ => OmegaClass(nomeClasse, packageName, vars.map(_.variable), methods)
 		//case packageName~imports~nomeClasse~_~_~_ => )
 	}
 	
@@ -154,13 +167,26 @@ object NewOmegaGrammar
 	{
 		val parser = new NewOmegaGrammar
 		
-		val resp = parser.parseAll(parser.classDeclaration,
-		    "package legal.Teste " + "\n" +
-		    "import {}" + "\n" +
-		    "class Teste" +
-				"{" + "\n" +
-				 "valor = 0" + "\n" + 
-				"}")
+		val source = """
+        package legal.teste
+        import 
+        {
+        }
+
+        class Teste
+        {
+            valor = 0
+            mut varTeste = valor.getValor()
+            
+            Int meuMetodo()
+            {
+                Int methodVar = 1
+                mut methodVar2 = 0
+            }
+        }
+      """
+		
+		val resp = parser.parseAll(parser.classDeclaration, source)
 				
 		println(new JavaConverter().convert(resp.get))
 	}
